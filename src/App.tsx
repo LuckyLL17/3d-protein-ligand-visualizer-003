@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { ContactShadows, Environment, Line, OrbitControls, Text } from '@react-three/drei';
+import { ContactShadows, Line, OrbitControls, Text } from '@react-three/drei';
 import * as THREE from 'three';
 
 type DisplayMode = 'cartoon' | 'surface' | 'atoms';
@@ -34,7 +34,7 @@ function Ligand({ rotation, selectedAtom, onSelect }: { rotation: number; select
 function ProteinModel({ displayMode, selectedResidue, setSelectedResidue, ligandRotation, selectedAtom, setSelectedAtom }: { displayMode: DisplayMode; selectedResidue: number; setSelectedResidue: (id: number) => void; ligandRotation: number; selectedAtom: string; setSelectedAtom: (id: string) => void }) {
   const showAtoms = displayMode === 'atoms';
   const surface = displayMode === 'surface';
-  return <Canvas shadows camera={{ position: [8, 5.5, 9], fov: 40 }}><color attach="background" args={['#09151d']} /><ambientLight intensity={1.2} /><directionalLight position={[5, 8, 5]} intensity={2.4} castShadow /><pointLight position={[-4, 3, 3]} color="#7fe0ff" intensity={18} distance={11} /><Environment preset="city" />
+  return <Canvas shadows camera={{ position: [8, 5.5, 9], fov: 40 }}><color attach="background" args={['#09151d']} /><ambientLight intensity={1.2} /><directionalLight position={[5, 8, 5]} intensity={2.4} castShadow /><pointLight position={[-4, 3, 3]} color="#7fe0ff" intensity={18} distance={11} />
     <group rotation={[.08, -.25, 0]}>{!showAtoms && <><Line points={helixPoints} color="#6b9fe9" lineWidth={surface ? 12 : 5} /> <Line points={sheetPoints} color="#d58acb" lineWidth={surface ? 13 : 6} /></>}{showAtoms && residues.map(residue => <mesh key={residue.id} position={[residue.x, residue.y, residue.z]}><sphereGeometry args={[.22, 12, 10]} /><meshStandardMaterial color={residue.color} /></mesh>)}{residues.map(residue => <group key={`res-${residue.id}`} position={[residue.x, residue.y, residue.z]}><mesh onClick={(event) => { event.stopPropagation(); setSelectedResidue(residue.id); }}><sphereGeometry args={[selectedResidue === residue.id ? .28 : .18, 16, 12]} /><meshStandardMaterial color={residue.color} emissive={selectedResidue === residue.id ? residue.color : '#000'} emissiveIntensity={selectedResidue === residue.id ? .8 : 0} transparent opacity={surface ? .9 : 1} /></mesh><Text position={[0, .43, 0]} fontSize={.14} color={selectedResidue === residue.id ? '#ffe9a2' : '#8baeb9'} anchorX="center">{residue.code}</Text></group>)}<Ligand rotation={ligandRotation} selectedAtom={selectedAtom} onSelect={setSelectedAtom} /></group><ContactShadows position={[0, -1.5, 0]} opacity={.32} scale={10} blur={2.5} /><OrbitControls makeDefault minDistance={5} maxDistance={16} /></Canvas>;
 }
 function Metric({ label, value, note }: { label: string; value: string; note: string }) { return <div className="metric"><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
