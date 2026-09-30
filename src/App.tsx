@@ -1,50 +1,214 @@
 import { useMemo, useState } from 'react';
-import { Canvas } from '@react-three/fiber';
-import { ContactShadows, Line, OrbitControls, Text } from '@react-three/drei';
-import * as THREE from 'three';
+import Viewer from './components/Viewer';
+import { AtomPanel, ConformerPanel, DetailPanel, MetricsPanel, ResiduePanel } from './components/panels';
+import type { Conformation, ConformerTemplate, DisplayMode } from './model/types';
+import { createConformation, defaultSelection, getTemplate, uniqueConformerName } from './model/conformers';
 
-type DisplayMode = 'cartoon' | 'surface' | 'atoms';
-type Residue = { id: number; code: string; name: string; x: number; y: number; z: number; color: string; role: 'active' | 'support' | 'loop' };
-type Atom = { id: string; element: 'C' | 'N' | 'O' | 'S'; x: number; y: number; z: number; color: string; radius: number };
-const residues: Residue[] = [
-  { id: 41, code: 'GLU41', name: '谷氨酸', x: -1.6, y: .4, z: .5, color: '#ef8e77', role: 'active' },
-  { id: 78, code: 'TYR78', name: '酪氨酸', x: -.7, y: 1.15, z: -.25, color: '#f0c76e', role: 'support' },
-  { id: 102, code: 'HIS102', name: '组氨酸', x: .4, y: .75, z: .2, color: '#71c9e6', role: 'active' },
-  { id: 146, code: 'ASP146', name: '天冬氨酸', x: 1.2, y: .15, z: -.45, color: '#e88389', role: 'active' },
-  { id: 183, code: 'PHE183', name: '苯丙氨酸', x: 1.8, y: .7, z: .35, color: '#c28ce8', role: 'support' },
-  { id: 219, code: 'SER219', name: '丝氨酸', x: .55, y: -.3, z: -.65, color: '#8fd6a2', role: 'loop' },
-  { id: 244, code: 'GLY244', name: '甘氨酸', x: -1.05, y: -.55, z: -.3, color: '#9aabb4', role: 'loop' }
-];
-const ligandAtoms: Atom[] = [
-  { id: 'C1', element: 'C', x: 0, y: 0, z: 0, color: '#d6e1e4', radius: .17 },
-  { id: 'C2', element: 'C', x: .55, y: .26, z: .08, color: '#d6e1e4', radius: .17 },
-  { id: 'N1', element: 'N', x: .98, y: -.18, z: .18, color: '#54b9e3', radius: .2 },
-  { id: 'O1', element: 'O', x: -.48, y: .35, z: .05, color: '#ec7474', radius: .18 },
-  { id: 'O2', element: 'O', x: -.15, y: -.5, z: -.1, color: '#ec7474', radius: .18 },
-  { id: 'S1', element: 'S', x: .42, y: .05, z: -.62, color: '#e7c35f', radius: .24 }
-];
-const bonds: [string, string][] = [['C1','C2'],['C1','O1'],['C1','O2'],['C2','N1'],['C2','S1']];
-const helixPoints = Array.from({ length: 46 }, (_, index) => { const t = index / 45; return new THREE.Vector3(-3.2 + t * 6.4, Math.sin(t * Math.PI * 4) * .72 + Math.cos(t * Math.PI * 2) * .18, Math.cos(t * Math.PI * 3) * .74); });
-const sheetPoints = Array.from({ length: 22 }, (_, index) => new THREE.Vector3(-3.5 + index * .33, 1.4 + Math.sin(index * .55) * .16, -.9 + Math.sin(index * .55) * .25));
-const makeBond = (a: THREE.Vector3, b: THREE.Vector3) => [a, b];
-function Ligand({ rotation, selectedAtom, onSelect }: { rotation: number; selectedAtom: string; onSelect: (id: string) => void }) {
-  const positions = useMemo(() => Object.fromEntries(ligandAtoms.map(atom => [atom.id, new THREE.Vector3(atom.x, atom.y, atom.z)])), []);
-  return <group position={[.1, .45, .15]} rotation={[0, rotation, 0]}>{bonds.map(([from, to]) => <Line key={`${from}-${to}`} points={makeBond(positions[from], positions[to])} color="#cbd9dc" lineWidth={3} />)}{ligandAtoms.map(atom => <mesh key={atom.id} position={[atom.x, atom.y, atom.z]} onClick={(event) => { event.stopPropagation(); onSelect(atom.id); }}><sphereGeometry args={[atom.radius * (selectedAtom === atom.id ? 1.35 : 1), 16, 12]} /><meshStandardMaterial color={atom.color} emissive={selectedAtom === atom.id ? atom.color : '#000000'} emissiveIntensity={selectedAtom === atom.id ? .7 : 0} /></mesh>)}</group>;
+function initialConformations() {
+  return [getTemplate('open'), getTemplate('closed'), getTemplate('apo')].map(t => createConformation(t));
 }
-function ProteinModel({ displayMode, selectedResidue, setSelectedResidue, ligandRotation, selectedAtom, setSelectedAtom }: { displayMode: DisplayMode; selectedResidue: number; setSelectedResidue: (id: number) => void; ligandRotation: number; selectedAtom: string; setSelectedAtom: (id: string) => void }) {
-  const showAtoms = displayMode === 'atoms';
-  const surface = displayMode === 'surface';
-  return <Canvas shadows camera={{ position: [8, 5.5, 9], fov: 40 }}><color attach="background" args={['#09151d']} /><ambientLight intensity={1.2} /><directionalLight position={[5, 8, 5]} intensity={2.4} castShadow /><pointLight position={[-4, 3, 3]} color="#7fe0ff" intensity={18} distance={11} />
-    <group rotation={[.08, -.25, 0]}>{!showAtoms && <><Line points={helixPoints} color="#6b9fe9" lineWidth={surface ? 12 : 5} /> <Line points={sheetPoints} color="#d58acb" lineWidth={surface ? 13 : 6} /></>}{showAtoms && residues.map(residue => <mesh key={residue.id} position={[residue.x, residue.y, residue.z]}><sphereGeometry args={[.22, 12, 10]} /><meshStandardMaterial color={residue.color} /></mesh>)}{residues.map(residue => <group key={`res-${residue.id}`} position={[residue.x, residue.y, residue.z]}><mesh onClick={(event) => { event.stopPropagation(); setSelectedResidue(residue.id); }}><sphereGeometry args={[selectedResidue === residue.id ? .28 : .18, 16, 12]} /><meshStandardMaterial color={residue.color} emissive={selectedResidue === residue.id ? residue.color : '#000'} emissiveIntensity={selectedResidue === residue.id ? .8 : 0} transparent opacity={surface ? .9 : 1} /></mesh><Text position={[0, .43, 0]} fontSize={.14} color={selectedResidue === residue.id ? '#ffe9a2' : '#8baeb9'} anchorX="center">{residue.code}</Text></group>)}<Ligand rotation={ligandRotation} selectedAtom={selectedAtom} onSelect={setSelectedAtom} /></group><ContactShadows position={[0, -1.5, 0]} opacity={.32} scale={10} blur={2.5} /><OrbitControls makeDefault minDistance={5} maxDistance={16} /></Canvas>;
-}
-function Metric({ label, value, note }: { label: string; value: string; note: string }) { return <div className="metric"><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
+
 export default function App() {
+  const [conformations, setConformations] = useState(initialConformations);
+  const [currentId, setCurrentId] = useState<string | null>(() => null);
+  const [selectedResidueId, setSelectedResidueId] = useState<number>(102);
+  const [selectedAtomId, setSelectedAtomId] = useState<string>('N1');
   const [mode, setMode] = useState<DisplayMode>('cartoon');
-  const [selectedResidue, setSelectedResidue] = useState(102);
-  const [selectedAtom, setSelectedAtom] = useState('N1');
-  const [ligandRotation, setLigandRotation] = useState(0.2);
   const [showInteractions, setShowInteractions] = useState(true);
-  const residue = residues.find(item => item.id === selectedResidue) ?? residues[2];
-  const interactionLines = useMemo(() => residues.filter(item => item.role === 'active').map(item => [new THREE.Vector3(item.x, item.y, item.z), new THREE.Vector3(item.x * .38, item.y * .34 + .4, item.z * .38)] as [THREE.Vector3, THREE.Vector3]), []);
-  return <div className="app"><header className="topbar"><div className="brand"><div className="brand-icon">P</div><div><span className="eyebrow">STRUCTURAL BIOLOGY / ANALYSIS WORKSPACE</span><h1>Protein Atlas <span>·</span> 配体结合可视化</h1></div></div><div className="header-meta"><span className="dataset">PDB-LITE / 1MOL</span><button onClick={() => setShowInteractions(value => !value)}>{showInteractions ? '隐藏相互作用' : '显示相互作用'}</button><button onClick={() => setLigandRotation(value => value + .35)}>旋转配体 ↻</button></div></header><main className="layout"><section className="model-card"><div className="model-head"><div><span className="eyebrow">MOLECULAR VIEWER</span><h2>蛋白质结合口袋 · Ligand LIG-17</h2></div><div className="mode-switch">{(['cartoon','surface','atoms'] as DisplayMode[]).map(item => <button key={item} className={mode === item ? 'active' : ''} onClick={() => setMode(item)}>{item === 'cartoon' ? '卡通带状' : item === 'surface' ? '表面模型' : '原子视图'}</button>)}</div></div><div className="canvas-wrap"><ProteinModel displayMode={mode} selectedResidue={selectedResidue} setSelectedResidue={setSelectedResidue} ligandRotation={ligandRotation} selectedAtom={selectedAtom} setSelectedAtom={setSelectedAtom} />{showInteractions && interactionLines.map((points, index) => <div key={index} />)}<div className="viewer-legend"><span><i className="dot protein" />蛋白骨架</span><span><i className="dot ligand" />配体原子</span><span><i className="dot interaction" />相互作用</span></div><div className="viewer-hint">左键旋转 · 滚轮缩放 · 点击残基或原子</div></div></section><aside className="sidebar"><section className="panel intro-panel"><span className="eyebrow">ACTIVE SITE</span><h3>结合口袋分析</h3><p>当前模型显示 7 个关键残基和一个小分子配体。通过选择残基查看空间关系与作用类型。</p><div className="metrics"><Metric label="口袋体积" value="486 Å³" note="预测区域" /><Metric label="结合残基" value="5" note="3 active / 2 support" /><Metric label="氢键" value="4" note="几何筛选" /></div></section><section className="panel"><div className="panel-title"><div><span className="eyebrow">RESIDUES</span><h3>关键残基</h3></div><span className="count">{residues.length}</span></div><div className="residue-list">{residues.map(item => <button key={item.id} className={selectedResidue === item.id ? 'residue selected' : 'residue'} onClick={() => setSelectedResidue(item.id)}><span className="residue-color" style={{ background: item.color }} /><span><b>{item.code}</b><small>{item.name}</small></span><em>{item.role === 'active' ? 'ACTIVE' : item.role === 'support' ? 'SUPPORT' : 'LOOP'}</em></button>)}</div></section><section className="panel detail-panel"><span className="eyebrow">SELECTED RESIDUE</span><div className="detail-title"><h3>{residue.code}</h3><span>{residue.name}</span></div><div className="detail-grid"><div><span>空间坐标</span><b>{residue.x.toFixed(2)} / {residue.y.toFixed(2)} / {residue.z.toFixed(2)} Å</b></div><div><span>残基角色</span><b>{residue.role === 'active' ? '结合活性位点' : residue.role === 'support' ? '口袋支撑' : '柔性环区'}</b></div><div><span>配体距离</span><b>{(1.9 + residue.id % 6 * .22).toFixed(2)} Å</b></div><div><span>相互作用</span><b>{residue.role === 'active' ? '氢键 / 极性' : '范德华力'}</b></div></div></section><section className="panel atom-panel"><span className="eyebrow">LIGAND ATOM</span><div className="atom-row"><span className="atom-badge">{selectedAtom.slice(0,1)}</span><div><b>{selectedAtom}</b><small>点击模型中的原子切换</small></div><span className="atom-value">{selectedAtom === 'N1' ? '供体' : selectedAtom.startsWith('O') ? '受体' : '骨架'}</span></div></section></aside></main></div>;
+
+  // 保证 currentId 始终指向现存构象（健壮性兜底；正常切换路径下不会触发）
+  const current = useMemo(() => {
+    if (conformations.length === 0) return undefined;
+    return conformations.find(conf => conf.id === currentId) ?? conformations[0];
+  }, [conformations, currentId]);
+  const effectiveCurrentId = current?.id ?? null;
+
+  const updateConformer = (id: string, patch: Partial<Conformation>) =>
+    setConformations(list => list.map(conf => (conf.id === id ? { ...conf, ...patch } : conf)));
+
+  const switchCurrent = (id: string) => setCurrentId(id);
+
+  /** 3D 中点击任何构象的残基：先把该构象设为当前，再选中它自己的残基 */
+  const pickResidue = (conformerId: string, residueId: number) => {
+    setCurrentId(conformerId);
+    setSelectedResidueId(residueId);
+  };
+
+  /** 3D 中点击任何构象的配体原子：原子 id 只在该构象自己的配体中有效 */
+  const pickAtom = (conformerId: string, atomId: string) => {
+    setCurrentId(conformerId);
+    setSelectedAtomId(atomId);
+  };
+
+  const loadConformer = (template: ConformerTemplate, customName: string) => {
+    const name = uniqueConformerName(
+      customName || template.defaultName,
+      conformations.map(conf => conf.name),
+    );
+    const conf = createConformation(template, name);
+    setConformations(list => [...list, conf]);
+    // 新加载的构象成为当前分析对象，并落到它自己的合法选择上
+    setCurrentId(conf.id);
+    setSelectedResidueId(defaultSelection(conf).residueId);
+    setSelectedAtomId(defaultSelection(conf).atomId);
+  };
+
+  /** 删除构象：优先选择后继（同位置的下一个），末尾删除则选择新的末尾，保证始终有稳定的当前对象 */
+  const removeConformer = (id: string) => {
+    const index = conformations.findIndex(conf => conf.id === id);
+    if (index === -1) return;
+    const wasCurrent = id === effectiveCurrentId;
+    const next = conformations.slice(0, index).concat(conformations.slice(index + 1));
+    setConformations(next);
+
+    if (next.length === 0) {
+      setCurrentId(null);
+      setSelectedAtomId('');
+      return;
+    }
+    if (wasCurrent) {
+      // 后继优先（删除最后一个时退化为前驱，即新末尾），不依赖被删对象
+      const successor = next[Math.min(index, next.length - 1)];
+      setCurrentId(successor.id);
+      const sel = defaultSelection(successor);
+      setSelectedResidueId(sel.residueId);
+      setSelectedAtomId(sel.atomId);
+    } else if (effectiveCurrentId !== null) {
+      // 删除的是非当前构象：校验当前选择在它自己的构象中仍然合法
+      const stillCurrent = next.find(conf => conf.id === effectiveCurrentId);
+      if (stillCurrent) {
+        if (!stillCurrent.residues.some(r => r.id === selectedResidueId)) {
+          setSelectedResidueId(defaultSelection(stillCurrent).residueId);
+        }
+        if (!stillCurrent.ligand?.atoms.some(a => a.id === selectedAtomId)) {
+          setSelectedAtomId(defaultSelection(stillCurrent).atomId);
+        }
+      }
+    }
+  };
+
+  const resetWorkspace = () => {
+    const list = initialConformations();
+    setConformations(list);
+    const first = list[0];
+    setCurrentId(first.id);
+    setSelectedResidueId(defaultSelection(first).residueId);
+    setSelectedAtomId(defaultSelection(first).atomId);
+  };
+
+  const rotateLigand = () => {
+    if (!current?.ligand) return;
+    const ligand = current.ligand;
+    updateConformer(current.id, { ligand: { ...ligand, rotationY: ligand.rotationY + 0.35 } });
+  };
+
+  return (
+    <div className="app">
+      <header className="topbar">
+        <div className="brand">
+          <div className="brand-icon">P</div>
+          <div>
+            <span className="eyebrow">STRUCTURAL BIOLOGY / ANALYSIS WORKSPACE</span>
+            <h1>
+              Protein Atlas <span>·</span> 多构象结构对比工作区
+            </h1>
+          </div>
+        </div>
+        <div className="header-meta">
+          <span className="dataset">
+            {conformations.length} 个构象{current ? ` / 当前：${current.name} · ${current.pdbCode}` : ' / 空工作区'}
+          </span>
+          <button onClick={() => setShowInteractions(value => !value)}>
+            {showInteractions ? '隐藏相互作用' : '显示相互作用'}
+          </button>
+          <button onClick={rotateLigand} disabled={!current?.ligand} title={current?.ligand ? '旋转当前构象配体' : '当前构象无配体'}>
+            旋转配体 ↻
+          </button>
+        </div>
+      </header>
+
+      <main className="layout">
+        <section className="model-card">
+          <div className="model-head">
+            <div>
+              <span className="eyebrow">MOLECULAR VIEWER</span>
+              <h2>
+                {current
+                  ? <>蛋白质结合口袋对比 · 当前分析：<span className="head-conf-name" style={{ color: current.color }}>{current.name}</span></>
+                  : '蛋白质结合口袋对比'}
+              </h2>
+            </div>
+            <div className="mode-switch">
+              {(['cartoon', 'surface', 'atoms'] as DisplayMode[]).map(item => (
+                <button key={item} className={mode === item ? 'active' : ''} onClick={() => setMode(item)}>
+                  {item === 'cartoon' ? '卡通带状' : item === 'surface' ? '表面模型' : '原子视图'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="canvas-wrap">
+            <Viewer
+              conformations={conformations}
+              currentId={effectiveCurrentId}
+              selectedResidueId={selectedResidueId}
+              selectedAtomId={selectedAtomId}
+              displayMode={mode}
+              showInteractions={showInteractions}
+              onPickResidue={pickResidue}
+              onPickAtom={pickAtom}
+            />
+            {conformations.length === 0 && (
+              <div className="viewer-empty">
+                <div className="viewer-empty-card">
+                  <b>场景为空</b>
+                  <span>所有构象均已删除，3D 场景仍可渲染</span>
+                  <button onClick={resetWorkspace}>加载示例构象</button>
+                </div>
+              </div>
+            )}
+            <div className="viewer-legend">
+              {conformations.filter(conf => conf.visible).map(conf => (
+                <span key={conf.id} className={conf.id === effectiveCurrentId ? 'legend-conf current' : 'legend-conf'}>
+                  <i className="dot" style={{ background: conf.color }} />
+                  {conf.name}
+                </span>
+              ))}
+              {showInteractions && current?.ligand && (
+                <span><i className="dot interaction" />相互作用（当前）</span>
+              )}
+            </div>
+            <div className="viewer-hint">左键旋转 · 滚轮缩放 · 点击残基或原子会同时切换所属构象</div>
+          </div>
+        </section>
+
+        <aside className="sidebar">
+          <ConformerPanel
+            conformations={conformations}
+            currentId={effectiveCurrentId}
+            onSwitch={switchCurrent}
+            onToggleVisible={id => updateConformer(id, { visible: !conformations.find(c => c.id === id)?.visible })}
+            onSetColor={(id, color) => updateConformer(id, { color })}
+            onSetOpacity={(id, opacity) => updateConformer(id, { opacity })}
+            onRemove={removeConformer}
+            onLoad={loadConformer}
+            onResetWorkspace={resetWorkspace}
+          />
+          {current ? (
+            <>
+              <MetricsPanel current={current} />
+              <ResiduePanel current={current} selectedResidueId={selectedResidueId} onSelect={setSelectedResidueId} />
+              <DetailPanel current={current} selectedResidueId={selectedResidueId} onSelect={setSelectedResidueId} />
+              <AtomPanel current={current} selectedAtomId={selectedAtomId} onSelect={setSelectedAtomId} onRotate={rotateLigand} />
+            </>
+          ) : (
+            <section className="panel">
+              <span className="eyebrow">NO ACTIVE CONFORMER</span>
+              <h3>无当前分析对象</h3>
+              <p className="panel-note">加载或录入一个构象后，残基、配体、指标与详情将在此显示。</p>
+            </section>
+          )}
+        </aside>
+      </main>
+    </div>
+  );
 }
